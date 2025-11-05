@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <title>JPod's Simple Form Filler</title>
+    <link rel="stylesheet" type="text/css" href="css/popup.css">
+  </head>
+
+  <body>
+    <div class="wrapper">
+      <div class="header">
+        <h2 class="extName">JPod's Simple Form Filler</h2>
+      </div>
+
+      <div class="content">
+        <div class="text-input-section">
+          <textarea
+            id="pastedText"
+            placeholder="Paste CSV data here:&#10;email,test@email.com&#10;password,mypassword&#10;first name,John"
+            rows="8"
+          ></textarea>
+        </div>
+
+        <div class="options-section">
+          <label class="checkbox-container">
+            <input type="checkbox" id="repeatCheckbox">
+            <span class="checkmark"></span>
+            <span class="label-text">Repeat (fill form multiple times)</span>
+          </label>
+        </div>
+
+        <div class="action-section">
+          <button id="fillButton" class="fillButton" disabled>Fill Form</button>
+        </div>
+
+        <div class="info-section">
+          <h3>Format Example:</h3>
+          <div class="example-box">
+            <code>email,test@email.com</code><br>
+            <code>password,mysecretpassword</code><br>
+            <code>first name,John</code><br>
+            <code>last name,Doe</code>
+          </div>
+          <p class="info-text">
+            Each line: <strong>field_name,value</strong>
+          </p>
+        </div>
+
+        <div id="snackbar"></div>
+      </div>
+
+      <div class="footer">
+        <span class="version" id="version"></span>
+      </div>
+    </div>
+
+    <script src="js/popup.js"></script>
+  </body>
+</html>

@@ -1,0 +1,16 @@
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+*.iml
+
+# Development/Testing
+Old Version/
+inspect-fields.js
+simple-inspect.js
+
+# Extension packages
+*.zip
+*.crx
+*.pem
