@@ -1,4 +1,4 @@
-# JPod's Simple Form Filler
+# FillJoy Simple Form Filler
 
 A Chrome extension that automatically fills web forms with CSV data. Perfect for quickly filling out repetitive forms with data from spreadsheets.
 
@@ -131,7 +131,3 @@ FormFiller/
 ## License
 
 This extension is provided as-is for personal and educational use.
-
-## Credits
-
-Developed by JPod

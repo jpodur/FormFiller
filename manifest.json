@@ -6,12 +6,12 @@
       "js": [ "js/fillFormsImproved.js" ],
       "matches": [ "\u003Call_urls>" ]
    } ],
-   "description": "JPod's Simple Form Filler - Automatically fill forms with CSV data",
+   "description": "FillJoy Simple Form Filler - Automatically fill forms with CSV data",
    "icons": {
       "128": "assets/images/iconOnly.png"
    },
    "manifest_version": 3,
-   "name": "JPod's Simple Form Filler",
+   "name": "FillJoy Simple Form Filler",
    "permissions": [ "activeTab", "scripting" ],
    "version": "3.4.0"
 }

@@ -1,5 +1,5 @@
 /**
- * JPod's Simple Form Filler - Improved Content Script
+ * FillJoy Simple Form Filler - Improved Content Script
  * Modern, readable implementation with better field detection
  */
 
@@ -310,7 +310,7 @@
     // Fill the form
     const filled = fillFormFields();
 
-    console.log(`JPod Form Filler: Filled ${filled} field(s)`);
+    console.log(`FillJoy: Filled ${filled} field(s)`);
 
     // Send response back
     sendResponse(filled);
@@ -319,5 +319,5 @@
     return true;
   });
 
-  console.log('JPod Form Filler: Content script loaded');
+  console.log('FillJoy: Content script loaded');
 })();
