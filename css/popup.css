@@ -93,6 +93,7 @@ textarea:focus {
 .action-section {
   display: flex;
   justify-content: center;
+  gap: 10px;
   margin-top: 8px;
 }
 
@@ -120,6 +121,24 @@ textarea:focus {
   color: #666;
   cursor: not-allowed;
   transform: none;
+}
+
+.exportButton {
+  background-color: #2196f3;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 12px 24px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.exportButton:hover {
+  background-color: #1976d2;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(33, 150, 243, 0.3);
 }
 
 /* Info Section */

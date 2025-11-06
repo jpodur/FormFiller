@@ -299,9 +299,89 @@
   }
 
   /**
+   * Export all fields on the page with their information
+   */
+  function exportFieldsInfo() {
+    const allFields = document.querySelectorAll('input, textarea, select');
+    const fieldsData = [];
+
+    allFields.forEach((field, index) => {
+      // Skip hidden/submit/button types
+      if (field.type === 'submit' || field.type === 'button' || field.type === 'hidden') return;
+
+      // Find label
+      const fieldLabel = findLabelForField(field);
+
+      // Get all associated labels
+      const labels = [];
+      if (field.id) {
+        const labelElements = document.querySelectorAll(`label[for="${field.id}"]`);
+        labelElements.forEach(l => labels.push(l.textContent.trim()));
+      }
+      const parentLabel = field.closest('label');
+      if (parentLabel) {
+        const labelText = parentLabel.textContent.trim();
+        if (labelText && !labels.includes(labelText)) {
+          labels.push(labelText);
+        }
+      }
+
+      // Gather field information
+      const fieldInfo = {
+        index: index + 1,
+        tag: field.tagName,
+        type: field.type || 'N/A',
+        id: field.id || '',
+        name: field.name || '',
+        placeholder: field.placeholder || '',
+        ariaLabel: field.getAttribute('aria-label') || '',
+        ariaLabelledBy: field.getAttribute('aria-labelledby') || '',
+        autocomplete: field.autocomplete || '',
+        labels: labels,
+        detectedLabel: fieldLabel || 'NOT DETECTED',
+        normalizedLabel: normalizeText(fieldLabel || ''),
+        value: field.value || '',
+        disabled: field.disabled,
+        readOnly: field.readOnly || false,
+        required: field.required || false
+      };
+
+      // For select fields, add options
+      if (field.tagName === 'SELECT') {
+        fieldInfo.options = Array.from(field.options).map(opt => ({
+          text: opt.text,
+          value: opt.value,
+          normalizedText: normalizeText(opt.text),
+          normalizedValue: normalizeText(opt.value)
+        }));
+      }
+
+      fieldsData.push(fieldInfo);
+    });
+
+    return {
+      url: window.location.href,
+      title: document.title,
+      timestamp: new Date().toISOString(),
+      totalFields: allFields.length,
+      exportedFields: fieldsData.length,
+      fields: fieldsData
+    };
+  }
+
+  /**
    * Message listener from popup
    */
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    // Handle export request
+    if (message.form === 'export') {
+      const exportData = exportFieldsInfo();
+      console.log('FillJoy: Exported', exportData.exportedFields, 'fields');
+      sendResponse(exportData);
+      return true;
+    }
+
+    // Handle fill form request
     if (message.form !== '0') return;
 
     csvData = message.csv || [];

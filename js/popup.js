@@ -10,6 +10,7 @@ let csvData = [];
 const pastedText = document.getElementById('pastedText');
 const repeatCheckbox = document.getElementById('repeatCheckbox');
 const fillButton = document.getElementById('fillButton');
+const exportButton = document.getElementById('exportButton');
 const versionElement = document.getElementById('version');
 const snackbar = document.getElementById('snackbar');
 
@@ -33,6 +34,7 @@ function loadVersion() {
 function setupEventListeners() {
   pastedText.addEventListener('input', handleTextInput);
   fillButton.addEventListener('click', handleFillForm);
+  exportButton.addEventListener('click', handleExportFields);
 }
 
 /**
@@ -180,4 +182,57 @@ function showSnackbar(message) {
   setTimeout(() => {
     snackbar.className = snackbar.className.replace('show', '');
   }, 3000);
+}
+
+/**
+ * Handle export fields button click
+ */
+async function handleExportFields() {
+  exportButton.disabled = true;
+  exportButton.textContent = 'Exporting...';
+
+  try {
+    // Get active tab
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+    // Send message to content script to export fields
+    chrome.tabs.sendMessage(
+      tab.id,
+      { form: 'export' },
+      (response) => {
+        if (chrome.runtime.lastError) {
+          console.error('Runtime error:', chrome.runtime.lastError.message);
+
+          if (chrome.runtime.lastError.message.includes('Receiving end does not exist')) {
+            showSnackbar('Please refresh the page first');
+          } else {
+            showSnackbar('Error: ' + chrome.runtime.lastError.message);
+          }
+        } else {
+          // Create and download JSON file
+          const dataStr = JSON.stringify(response, null, 2);
+          const blob = new Blob([dataStr], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const filename = `form-fields-${new Date().toISOString().slice(0,10)}.json`;
+
+          chrome.downloads.download({
+            url: url,
+            filename: filename,
+            saveAs: true
+          }, () => {
+            showSnackbar(`Exported ${response.fields.length} fields`);
+            URL.revokeObjectURL(url);
+          });
+        }
+
+        exportButton.disabled = false;
+        exportButton.textContent = 'Export Fields';
+      }
+    );
+  } catch (error) {
+    console.error('Error:', error);
+    showSnackbar('Error exporting fields');
+    exportButton.disabled = false;
+    exportButton.textContent = 'Export Fields';
+  }
 }
