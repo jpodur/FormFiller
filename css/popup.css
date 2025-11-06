@@ -211,11 +211,25 @@ textarea:focus {
   margin-top: 20px;
   padding-top: 12px;
   border-top: 1px solid #f0f0f0;
-  text-align: right;
+  text-align: center;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
 }
 
 .version {
   font-size: 11px;
   color: #999;
   font-style: italic;
+}
+
+.separator {
+  font-size: 11px;
+  color: #ccc;
+}
+
+.author {
+  font-size: 11px;
+  color: #999;
 }
