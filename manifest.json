@@ -12,6 +12,6 @@
    },
    "manifest_version": 3,
    "name": "FillJoy Simple Form Filler",
-   "permissions": [ "activeTab", "scripting", "downloads" ],
+   "permissions": [ "activeTab", "scripting" ],
    "version": "3.5.0"
 }
