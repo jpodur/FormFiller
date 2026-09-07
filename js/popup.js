@@ -8,7 +8,10 @@ let csvData = [];
 
 // DOM Elements
 const pastedText = document.getElementById('pastedText');
-const repeatCheckbox = document.getElementById('repeatCheckbox');
+const keepInMemoryCheckbox = document.getElementById('keepInMemoryCheckbox');
+const sessionAutofillCheckbox = document.getElementById('sessionAutofillCheckbox');
+const persistentText = document.getElementById('persistentText');
+const persistentAutofillCheckbox = document.getElementById('persistentAutofillCheckbox');
 const fillButton = document.getElementById('fillButton');
 const exportButton = document.getElementById('exportButton');
 const versionElement = document.getElementById('version');
@@ -18,7 +21,74 @@ const snackbar = document.getElementById('snackbar');
 document.addEventListener('DOMContentLoaded', () => {
   loadVersion();
   setupEventListeners();
+  restoreState();
 });
+
+/**
+ * Restore saved state from chrome.storage.session (short-term) and
+ * chrome.storage.local (persistent) into the popup UI.
+ */
+function restoreState() {
+  chrome.storage.session.get(['keepInMemory', 'sessionAutofill', 'sessionCsvText'], (data) => {
+    if (data.keepInMemory) {
+      keepInMemoryCheckbox.checked = true;
+      sessionAutofillCheckbox.disabled = false;
+      pastedText.value = data.sessionCsvText || '';
+      sessionAutofillCheckbox.checked = !!data.sessionAutofill;
+    }
+    updateFillButtonState();
+  });
+
+  chrome.storage.local.get(['persistentCsvText', 'persistentAutofill'], (data) => {
+    persistentText.value = data.persistentCsvText || '';
+    persistentAutofillCheckbox.checked = !!data.persistentAutofill;
+    updateFillButtonState();
+  });
+}
+
+/**
+ * Enable the Fill Form button if either text area has content.
+ */
+function updateFillButtonState() {
+  const hasSessionData = pastedText.value.trim().length > 0;
+  const hasPersistentData = persistentText.value.trim().length > 0;
+  fillButton.disabled = !(hasSessionData || hasPersistentData);
+}
+
+/**
+ * Combine parsed CSV data from the session field and the persistent field.
+ * If the same field name appears in both, the session ("Copied") value wins
+ * and the persistent duplicate is dropped - reported back as a conflict.
+ */
+function normalizeFieldName(name) {
+  return name.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function mergeCsvData(sessionCsv, persistentCsv) {
+  const sessionFieldNames = new Set(sessionCsv.map(([field]) => normalizeFieldName(field)));
+  const conflicts = [];
+  const filteredPersistent = [];
+
+  persistentCsv.forEach(([field, value]) => {
+    if (sessionFieldNames.has(normalizeFieldName(field))) {
+      conflicts.push(field);
+    } else {
+      filteredPersistent.push([field, value]);
+    }
+  });
+
+  return {
+    combined: sessionCsv.concat(filteredPersistent),
+    conflicts
+  };
+}
+
+function getCombinedCsvData() {
+  const sessionCsv = parseCSV(pastedText.value.trim());
+  const persistentValue = persistentText.value.trim();
+  const persistentCsv = persistentValue ? parseCSV(persistentValue) : [];
+  return mergeCsvData(sessionCsv, persistentCsv);
+}
 
 /**
  * Load and display extension version
@@ -33,35 +103,71 @@ function loadVersion() {
  */
 function setupEventListeners() {
   pastedText.addEventListener('input', handleTextInput);
+  persistentText.addEventListener('input', handlePersistentTextInput);
+  keepInMemoryCheckbox.addEventListener('change', handleKeepInMemoryChange);
+  sessionAutofillCheckbox.addEventListener('change', handleSessionAutofillChange);
+  persistentAutofillCheckbox.addEventListener('change', handlePersistentAutofillChange);
   fillButton.addEventListener('click', handleFillForm);
   exportButton.addEventListener('click', handleExportFields);
 }
 
 /**
- * Handle pasted text input
+ * Handle pasted text input (session field)
  */
 function handleTextInput(event) {
-  const text = event.target.value.trim();
+  updateFillButtonState();
 
-  if (text) {
-    // Parse the pasted text
-    csvData = parseCSV(text);
-
-    if (csvData.length > 0) {
-      fillButton.disabled = false;
-    } else {
-      fillButton.disabled = true;
-    }
-  } else {
-    csvData = [];
-    fillButton.disabled = true;
+  if (keepInMemoryCheckbox.checked) {
+    chrome.storage.session.set({ sessionCsvText: event.target.value });
   }
+}
+
+/**
+ * Handle pasted text input (persistent field) - always saved
+ */
+function handlePersistentTextInput(event) {
+  updateFillButtonState();
+  chrome.storage.local.set({ persistentCsvText: event.target.value });
+}
+
+/**
+ * Handle "Keep in Memory" checkbox toggle
+ */
+function handleKeepInMemoryChange() {
+  if (keepInMemoryCheckbox.checked) {
+    sessionAutofillCheckbox.disabled = false;
+    chrome.storage.session.set({
+      keepInMemory: true,
+      sessionCsvText: pastedText.value
+    });
+  } else {
+    sessionAutofillCheckbox.checked = false;
+    sessionAutofillCheckbox.disabled = true;
+    chrome.storage.session.remove(['keepInMemory', 'sessionAutofill', 'sessionCsvText']);
+  }
+}
+
+/**
+ * Handle session "Autofill" checkbox toggle
+ */
+function handleSessionAutofillChange() {
+  chrome.storage.session.set({ sessionAutofill: sessionAutofillCheckbox.checked });
+}
+
+/**
+ * Handle persistent "Autofill" checkbox toggle
+ */
+function handlePersistentAutofillChange() {
+  chrome.storage.local.set({ persistentAutofill: persistentAutofillCheckbox.checked });
 }
 
 /**
  * Handle fill form button click
  */
 async function handleFillForm() {
+  const { combined, conflicts } = getCombinedCsvData();
+  csvData = combined;
+
   if (csvData.length === 0) {
     showSnackbar('No data to fill');
     return;
@@ -74,31 +180,50 @@ async function handleFillForm() {
     // Get active tab
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
+    // Inject the content script first
+    await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      files: ['js/fillFormsImproved.js']
+    });
+
     // Send message to content script
     chrome.tabs.sendMessage(
       tab.id,
       {
         form: '0', // Simple form mode
         csv: csvData,
-        repeat: repeatCheckbox.checked,
         filesToUpload: [] // No file uploads
       },
       (response) => {
         if (chrome.runtime.lastError) {
           console.error('Runtime error:', chrome.runtime.lastError.message);
-
-          // Check if content script is not loaded
-          if (chrome.runtime.lastError.message.includes('Receiving end does not exist')) {
-            showSnackbar('Please refresh the page first');
-          } else if (chrome.runtime.lastError.message.includes('message port closed')) {
-            showSnackbar('Extension reloaded - please refresh page');
-          } else {
-            console.error('Full error:', chrome.runtime.lastError);
-            showSnackbar('Error: ' + chrome.runtime.lastError.message);
-          }
+          showSnackbar('Error: ' + chrome.runtime.lastError.message);
         } else {
-          console.log('Success! Filled:', response, 'fields');
-          showSnackbar(`Filled: ${response} field(s)`);
+          // Handle new response format (object with filled/unfilled)
+          const filled = typeof response === 'number' ? response : response.filled;
+          const unfilled = typeof response === 'object' ? response.unfilled : [];
+
+          console.log('Success! Filled:', filled, 'fields');
+
+          const messageLines = [];
+
+          if (conflicts.length > 0) {
+            conflicts.forEach((field) => {
+              messageLines.push(`Conflict: "${field}" in both Copied & Persistent \u2014 using Copied.`);
+            });
+          }
+
+          if (unfilled && unfilled.length > 0) {
+            const unfilledList = unfilled.join(', ');
+            messageLines.push(`Filled: ${filled} field(s)`);
+            messageLines.push(`Not found: ${unfilledList}`);
+            console.log('Unfilled CSV entries:', unfilled);
+          } else {
+            messageLines.push(`Filled: ${filled} field(s)`);
+          }
+
+          const duration = conflicts.length > 0 ? 6000 : (unfilled && unfilled.length > 0 ? 5000 : 3000);
+          showSnackbar(messageLines.join('\n'), duration);
         }
 
         fillButton.disabled = false;
@@ -123,7 +248,10 @@ function parseCSV(text) {
 
   // Remove leading and trailing quotes from Google Sheets copy-paste
   // Google Sheets often wraps the entire selection in quotes
-  if (text.startsWith('"') && text.endsWith('"')) {
+  // Handle both straight quotes (") and curly/smart quotes ("")
+  if ((text.startsWith('"') && text.endsWith('"')) ||
+      (text.startsWith('"') && text.endsWith('"')) ||
+      (text.startsWith('"') && text.endsWith('"'))) {
     text = text.slice(1, -1);
   }
 
@@ -138,6 +266,10 @@ function parseCSV(text) {
     // Skip empty lines
     if (!line) continue;
 
+    // Remove any leading/trailing quotes from the entire line first
+    // This handles cases where Google Sheets adds quotes around individual lines
+    line = line.replace(/^[""]|[""]$/g, '');
+
     // Simple CSV parsing - handle quoted values
     let field = '';
     let value = '';
@@ -147,7 +279,7 @@ function parseCSV(text) {
     for (let i = 0; i < line.length; i++) {
       const char = line[i];
 
-      if (char === '"') {
+      if (char === '"' || char === '"' || char === '"') {
         inQuotes = !inQuotes;
       } else if (char === ',' && !inQuotes && !pastComma) {
         pastComma = true;
@@ -160,9 +292,9 @@ function parseCSV(text) {
       }
     }
 
-    // Clean up field and value
-    field = field.trim().replace(/^"|"$/g, '');
-    value = value.trim().replace(/^"|"$/g, '');
+    // Clean up field and value - remove both straight and curly quotes
+    field = field.trim().replace(/^[""]|[""]$/g, '');
+    value = value.trim().replace(/^[""]|[""]$/g, '');
 
     if (field) {
       result.push([field, value]);
@@ -175,13 +307,13 @@ function parseCSV(text) {
 /**
  * Show snackbar notification
  */
-function showSnackbar(message) {
+function showSnackbar(message, duration = 3000) {
   snackbar.textContent = message;
   snackbar.className = 'show';
 
   setTimeout(() => {
     snackbar.className = snackbar.className.replace('show', '');
-  }, 3000);
+  }, duration);
 }
 
 /**
@@ -195,6 +327,12 @@ async function handleExportFields() {
     // Get active tab
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
+    // Inject the content script first
+    await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      files: ['js/fillFormsImproved.js']
+    });
+
     // Send message to content script to export fields
     chrome.tabs.sendMessage(
       tab.id,
@@ -202,12 +340,7 @@ async function handleExportFields() {
       (response) => {
         if (chrome.runtime.lastError) {
           console.error('Runtime error:', chrome.runtime.lastError.message);
-
-          if (chrome.runtime.lastError.message.includes('Receiving end does not exist')) {
-            showSnackbar('Please refresh the page first');
-          } else {
-            showSnackbar('Error: ' + chrome.runtime.lastError.message);
-          }
+          showSnackbar('Error: ' + chrome.runtime.lastError.message);
         } else {
           // Create HTML page to display the data
           const html = createExportHTML(response);
@@ -268,6 +401,44 @@ function createExportHTML(data) {
       margin-top: 16px;
       font-size: 14px;
     }
+    .csv-container {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .csv-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .csv-title {
+      font-size: 20px;
+      font-weight: 600;
+      color: #4caf50;
+    }
+    .csv-description {
+      color: #666;
+      font-size: 14px;
+      margin-bottom: 12px;
+      line-height: 1.5;
+    }
+    .csv-content {
+      background: #f5f5f5;
+      border: 2px solid #4caf50;
+      border-radius: 6px;
+      padding: 16px;
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+      line-height: 1.8;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      max-height: 400px;
+      overflow-y: auto;
+      color: #1b5e20;
+    }
     .field {
       background: white;
       padding: 20px;
@@ -312,6 +483,35 @@ function createExportHTML(data) {
       flex: 1;
     }
     .field-info { display: grid; grid-template-columns: 150px 1fr; gap: 8px; font-size: 14px; }
+    .use-in-csv-section {
+      background: #e8f5e9;
+      border: 2px solid #4caf50;
+      border-radius: 6px;
+      padding: 12px;
+      margin-bottom: 16px;
+      grid-column: 1 / -1;
+    }
+    .use-in-csv-label {
+      font-weight: 700;
+      color: #2e7d32;
+      font-size: 12px;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .use-in-csv-value {
+      font-family: 'Courier New', monospace;
+      font-size: 14px;
+      color: #1b5e20;
+      font-weight: 600;
+      word-break: break-all;
+    }
+    .use-in-csv-normalized {
+      font-size: 11px;
+      color: #558b2f;
+      font-style: italic;
+      margin-top: 4px;
+    }
     .field-label { font-weight: 600; color: #666; }
     .field-value {
       font-family: 'Courier New', monospace;
@@ -395,15 +595,45 @@ function createExportHTML(data) {
       </div>
     </div>
 
+    <div class="csv-container">
+      <div class="csv-header">
+        <h2 class="csv-title">📋 Ready-to-Paste CSV Format</h2>
+        <button class="copy-btn" onclick="copyCSV()">Copy CSV</button>
+      </div>
+      <p class="csv-description">
+        <strong>Copy this and paste directly into FillJoy!</strong>
+        Fields with existing values show their current values.
+        Empty fields show their labels as placeholders (replace with your data).
+      </p>
+      <div class="csv-content" id="csvContent">${escapeHtml(data.csvFormat || 'No fields available')}</div>
+    </div>
+
     ${data.fields.map(field => `
       <div class="field">
         <div class="field-header">
           <span class="field-index">#${field.index}</span>
           <span class="field-tag">${field.tag}</span>
           <span class="field-type">${field.type}</span>
-          <span class="field-detected">${escapeHtml(field.detectedLabel)}</span>
+          ${field.labels && field.labels.length > 0 ? `
+            <span class="field-detected">${escapeHtml(field.labels[0])}</span>
+          ` : `
+            <span class="field-detected">${escapeHtml(field.detectedLabel)}</span>
+          `}
         </div>
         <div class="field-info">
+          <div class="use-in-csv-section">
+            <div class="use-in-csv-label">✓ USE THIS IN YOUR CSV:</div>
+            <div class="use-in-csv-value">${escapeHtml(field.detectedLabel)}</div>
+            <div class="use-in-csv-normalized">(normalized for matching: ${escapeHtml(field.normalizedLabel)})</div>
+          </div>
+
+          ${field.labels && field.labels.length > 0 ? `
+            <div class="field-label">Visible Label:</div>
+            <div class="labels-list">
+              ${field.labels.map(label => `<span class="label-badge">${escapeHtml(label)}</span>`).join('')}
+            </div>
+          ` : ''}
+
           <div class="field-label">ID:</div>
           <div class="field-value ${field.id ? '' : 'empty'}">${escapeHtml(field.id) || '(none)'}</div>
 
@@ -426,13 +656,6 @@ function createExportHTML(data) {
           ${field.autocomplete ? `
             <div class="field-label">Autocomplete:</div>
             <div class="field-value">${escapeHtml(field.autocomplete)}</div>
-          ` : ''}
-
-          ${field.labels && field.labels.length > 0 ? `
-            <div class="field-label">Labels:</div>
-            <div class="labels-list">
-              ${field.labels.map(label => `<span class="label-badge">${escapeHtml(label)}</span>`).join('')}
-            </div>
           ` : ''}
 
           ${field.value ? `
@@ -472,12 +695,21 @@ function createExportHTML(data) {
   </div>
 
   <script>
+    function copyCSV() {
+      const csvText = document.getElementById('csvContent').textContent;
+      navigator.clipboard.writeText(csvText).then(() => {
+        const btns = document.querySelectorAll('.copy-btn');
+        btns[0].textContent = '✓ Copied!';
+        setTimeout(() => btns[0].textContent = 'Copy CSV', 2000);
+      });
+    }
+
     function copyJSON() {
       const jsonText = document.getElementById('jsonData').textContent;
       navigator.clipboard.writeText(jsonText).then(() => {
-        const btn = document.querySelector('.copy-btn');
-        btn.textContent = '✓ Copied!';
-        setTimeout(() => btn.textContent = 'Copy JSON', 2000);
+        const btns = document.querySelectorAll('.copy-btn');
+        btns[1].textContent = '✓ Copied!';
+        setTimeout(() => btns[1].textContent = 'Copy JSON', 2000);
       });
     }
   </script>

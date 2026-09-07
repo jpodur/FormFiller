@@ -254,6 +254,7 @@
   function fillFormFields() {
     fieldsFilled = 0;
     const filledFields = new Set(); // Track filled fields to avoid duplicates
+    const matchedCsvIndices = new Set(); // Track which CSV entries were matched
 
     // Get all fillable fields
     const allFields = document.querySelectorAll('input, textarea, select');
@@ -289,13 +290,25 @@
           if (filled) {
             fieldsFilled++;
             filledFields.add(field);
+            matchedCsvIndices.add(i); // Mark this CSV entry as matched
             break; // Move to next field
           }
         }
       }
     });
 
-    return fieldsFilled;
+    // Identify unfilled CSV entries
+    const unfilledEntries = [];
+    for (let i = 0; i < csvData.length; i++) {
+      if (!matchedCsvIndices.has(i)) {
+        unfilledEntries.push(csvData[i][0]); // Just the field name
+      }
+    }
+
+    return {
+      filled: fieldsFilled,
+      unfilled: unfilledEntries
+    };
   }
 
   /**
@@ -351,6 +364,7 @@
         fieldInfo.options = Array.from(field.options).map(opt => ({
           text: opt.text,
           value: opt.value,
+          selected: opt.selected,
           normalizedText: normalizeText(opt.text),
           normalizedValue: normalizeText(opt.value)
         }));
@@ -359,14 +373,160 @@
       fieldsData.push(fieldInfo);
     });
 
+    // Generate copy-pasteable CSV format
+    const csvLines = [];
+    fieldsData.forEach(field => {
+      const fieldName = field.detectedLabel;
+      let fieldValue = field.value || '';
+
+      // If no value present, use the first visible label as a placeholder
+      if (!fieldValue && field.labels && field.labels.length > 0) {
+        fieldValue = field.labels[0];
+      }
+
+      // For select fields with no value, use the selected option text or first option
+      if (!fieldValue && field.tag === 'SELECT' && field.options && field.options.length > 0) {
+        const selectedOption = field.options.find(opt => opt.selected);
+        if (selectedOption) {
+          fieldValue = selectedOption.text;
+        } else {
+          fieldValue = field.options[0].text;
+        }
+      }
+
+      // Only add fields that have a detectable label
+      if (fieldName && fieldName !== 'NOT DETECTED') {
+        csvLines.push(`${fieldName},${fieldValue}`);
+      }
+    });
+
     return {
       url: window.location.href,
       title: document.title,
       timestamp: new Date().toISOString(),
       totalFields: allFields.length,
       exportedFields: fieldsData.length,
-      fields: fieldsData
+      fields: fieldsData,
+      csvFormat: csvLines.join('\n')
     };
+  }
+
+  /**
+   * Parse CSV text into array of [field, value] pairs
+   * (Duplicated from popup.js - content scripts can't share modules with the popup)
+   */
+  function parseCSV(text) {
+    text = text.trim();
+
+    if ((text.startsWith('"') && text.endsWith('"')) ||
+        (text.startsWith('“') && text.endsWith('”')) ||
+        (text.startsWith('‘') && text.endsWith('’'))) {
+      text = text.slice(1, -1);
+    }
+
+    const lines = text.split(/\r?\n/).filter(line => line.trim());
+    const result = [];
+
+    for (let line of lines) {
+      line = line.trim();
+      if (!line) continue;
+
+      line = line.replace(/^[“‘]|[”’]$/g, '');
+
+      let field = '';
+      let value = '';
+      let inQuotes = false;
+      let pastComma = false;
+
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+
+        if (char === '"' || char === '“' || char === '”') {
+          inQuotes = !inQuotes;
+        } else if (char === ',' && !inQuotes && !pastComma) {
+          pastComma = true;
+        } else {
+          if (!pastComma) {
+            field += char;
+          } else {
+            value += char;
+          }
+        }
+      }
+
+      field = field.trim().replace(/^[“‘]|[”’]$/g, '');
+      value = value.trim().replace(/^[“‘]|[”’]$/g, '');
+
+      if (field) {
+        result.push([field, value]);
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Combine session and persistent CSV data, resolving conflicts in favor
+   * of the session ("Copied") data - mirrors popup.js's merge logic.
+   */
+  function normalizeFieldName(name) {
+    return name.trim().toLowerCase().replace(/\s+/g, ' ');
+  }
+
+  function mergeCsvData(sessionCsv, persistentCsv) {
+    const sessionFieldNames = new Set(sessionCsv.map(([field]) => normalizeFieldName(field)));
+    const conflicts = [];
+    const filteredPersistent = [];
+
+    persistentCsv.forEach(([field, value]) => {
+      if (sessionFieldNames.has(normalizeFieldName(field))) {
+        conflicts.push(field);
+      } else {
+        filteredPersistent.push([field, value]);
+      }
+    });
+
+    return {
+      combined: sessionCsv.concat(filteredPersistent),
+      conflicts
+    };
+  }
+
+  /**
+   * Check stored Autofill settings (session + persistent) and fill the page
+   * automatically if either is enabled. Runs once per script injection -
+   * either the automatic page-load injection declared in manifest.json, or
+   * a manual injection triggered from the popup.
+   */
+  async function checkAutofillOnLoad() {
+    try {
+      const sessionData = await chrome.storage.session.get(['keepInMemory', 'sessionAutofill', 'sessionCsvText']);
+      const localData = await chrome.storage.local.get(['persistentAutofill', 'persistentCsvText']);
+
+      const sessionEnabled = !!(sessionData.keepInMemory && sessionData.sessionAutofill && sessionData.sessionCsvText);
+      const persistentEnabled = !!(localData.persistentAutofill && localData.persistentCsvText);
+
+      const sessionCsv = sessionEnabled ? parseCSV(sessionData.sessionCsvText) : [];
+      const persistentCsv = persistentEnabled ? parseCSV(localData.persistentCsvText) : [];
+
+      if (sessionCsv.length === 0 && persistentCsv.length === 0) return;
+
+      const { combined, conflicts } = mergeCsvData(sessionCsv, persistentCsv);
+
+      if (conflicts.length > 0) {
+        conflicts.forEach((field) => {
+          console.warn(`FillJoy: Conflict: "${field}" in both Copied & Persistent \u2014 using Copied.`);
+        });
+      }
+
+      if (combined.length > 0) {
+        csvData = combined;
+        const result = fillFormFields();
+        console.log(`FillJoy: Autofilled ${result.filled} field(s) on page load`);
+      }
+    } catch (error) {
+      console.error('FillJoy: Autofill check failed', error);
+    }
   }
 
   /**
@@ -388,16 +548,21 @@
     shouldRepeat = message.repeat || false;
 
     // Fill the form
-    const filled = fillFormFields();
+    const result = fillFormFields();
 
-    console.log(`FillJoy: Filled ${filled} field(s)`);
+    console.log(`FillJoy: Filled ${result.filled} field(s)`);
+    if (result.unfilled.length > 0) {
+      console.log('FillJoy: Unfilled CSV entries:', result.unfilled);
+    }
 
     // Send response back
-    sendResponse(filled);
+    sendResponse(result);
 
     // Return true to indicate async response
     return true;
   });
+
+  checkAutofillOnLoad();
 
   console.log('FillJoy: Content script loaded');
 })();

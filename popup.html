@@ -23,9 +23,14 @@
 
         <div class="options-section">
           <label class="checkbox-container">
-            <input type="checkbox" id="repeatCheckbox">
+            <input type="checkbox" id="keepInMemoryCheckbox">
             <span class="checkmark"></span>
-            <span class="label-text">Repeat (fill form multiple times)</span>
+            <span class="label-text">Keep in Memory (survives page refresh, clears when Chrome closes)</span>
+          </label>
+          <label class="checkbox-container" id="sessionAutofillLabel">
+            <input type="checkbox" id="sessionAutofillCheckbox" disabled>
+            <span class="checkmark"></span>
+            <span class="label-text">Autofill (fills automatically when a page opens — requires Keep in Memory)</span>
           </label>
         </div>
 
@@ -34,16 +39,28 @@
         </div>
 
         <div class="info-section">
-          <h3>Format Example:</h3>
+          <h3>How to use FillJoy</h3>
           <div class="example-box">
-            <code>email,test@email.com</code><br>
-            <code>password,mysecretpassword</code><br>
-            <code>first name,John</code><br>
-            <code>last name,Doe</code>
+            <p><strong>1.</strong> Paste your data into the text area above. Use the standard CSV format:</p>
+            <p style="text-align: center; margin: 8px 0;"><span class="highlight">field_name, value</span> (one per line).</p>
+            <p style="margin-top: 8px;">Use the "Export Fields" button below to see exactly how fields in the current page are labelled.</p>
+            <p style="margin-top: 12px;"><strong>2.</strong> Click "Fill Form" to instantly populate the page. Check "Keep in Memory" to hold your pasted data across page refreshes for this browser session, and "Autofill" to have it fill automatically the moment a page loads.</p>
           </div>
-          <p class="info-text">
-            Each line: <strong>field_name,value</strong>
-          </p>
+        </div>
+
+        <div class="persistent-section">
+          <h3>Saved Form Fill Entries (Persistent)</h3>
+          <p class="persistent-description">Data you enter here is saved on this device and stays put even after Chrome closes — use it for values you fill in over and over, like your email address.</p>
+          <textarea
+            id="persistentText"
+            placeholder="Paste CSV data here:&#10;email,test@email.com"
+            rows="5"
+          ></textarea>
+          <label class="checkbox-container">
+            <input type="checkbox" id="persistentAutofillCheckbox">
+            <span class="checkmark"></span>
+            <span class="label-text">Autofill (fills automatically when a page opens)</span>
+          </label>
         </div>
 
         <div class="export-section">

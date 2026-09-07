@@ -29,6 +29,12 @@ Automatically matches your data to form fields using intelligent detection:
 **🔄 Flexible Matching**
 Handles field names with underscores, hyphens, spaces, and special characters. Works even when your CSV field names don't exactly match the form.
 
+**🧠 Keep in Memory & Autofill**
+Keep your pasted data across page refreshes for the rest of your browser session (it clears automatically when Chrome closes), and optionally have it fill in automatically the instant a page loads - no click required.
+
+**💾 Saved Form Fill Entries (Persistent)**
+A second, dedicated field for data you use over and over across many forms - like your email address. It's saved on your device and survives Chrome restarts, with its own independent Autofill toggle.
+
 **🎨 Google Sheets Compatible**
 Automatically handles quotation marks and formatting from Google Sheets copy-paste.
 
@@ -103,12 +109,13 @@ For dropdowns, you can use:
 
 ### 🔒 Privacy & Security
 
-- **No data collection**: Your data stays on your device
+- **No data collection**: We never see, transmit, or share your data - it never leaves your browser
 - **No tracking**: We don't track your usage
 - **No internet required**: Works completely offline
 - **No server uploads**: Data is never sent anywhere
+- **On-device storage only, by your choice**: If you enable Keep in Memory or Saved Form Fill Entries, your data is stored locally in your own browser - never synced, uploaded, or shared - and Keep in Memory data clears automatically when Chrome closes
 
-Your privacy is our priority. This extension processes everything locally in your browser.
+Your privacy is our priority. This extension processes and stores everything locally in your browser.
 
 ---
 
@@ -126,8 +133,8 @@ For dropdown menus, you can use short codes instead of typing the full option te
 - `ON_Brd_Res_Status,1` matches "Pupil of the Board (01)"
 - `grade_level,12` matches "Grade 12"
 
-**Multiple Forms:**
-Enable "Repeat" mode to fill the same form multiple times with the same data - useful for testing.
+**Autofill for Repeat Visits:**
+Enable "Autofill" (session or persistent) to have FillJoy fill a matching page automatically the moment it loads - handy for forms you fill out the same way every time.
 
 ---
 
@@ -137,6 +144,7 @@ Enable "Repeat" mode to fill the same form multiple times with the same data - u
 - **No external dependencies**: Lightweight and fast
 - **11 field detection strategies**: Finds fields even on complex forms
 - **Intelligent normalization**: Handles different naming conventions
+- **On-device storage**: Uses Chrome's local `storage` API for Keep in Memory and Saved Form Fill Entries - nothing is ever transmitted externally
 
 ---
 
@@ -144,7 +152,7 @@ Enable "Repeat" mode to fill the same form multiple times with the same data - u
 
 Found a form that doesn't work? Have suggestions?
 
-Visit our GitHub: https://github.com/jpodur/FormFiller
+Visit our GitHub: https://github.com/jpodur/FillJoy
 
 We're actively improving FillJoy and love hearing from our users!
 
@@ -152,7 +160,12 @@ We're actively improving FillJoy and love hearing from our users!
 
 ### 📜 Version History
 
-**v3.4.0** - Current Release
+**v3.7.0** - Current Release
+- Replaced non-functional "Repeat" checkbox with **Keep in Memory** and **Autofill**
+- Added **Saved Form Fill Entries (Persistent)** for data reused across many forms
+- Smart conflict handling when the same field appears in both saved data sets
+
+**v3.4.0**
 - Enhanced field detection with 11 strategies
 - Improved dropdown matching logic
 - Google Sheets quotation handling

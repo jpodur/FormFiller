@@ -2,16 +2,20 @@
    "action": {
       "default_popup": "popup.html"
    },
-   "content_scripts": [ {
-      "js": [ "js/fillFormsImproved.js" ],
-      "matches": [ "\u003Call_urls>" ]
-   } ],
    "description": "FillJoy Simple Form Filler - Automatically fill forms with CSV data",
    "icons": {
       "128": "assets/images/iconOnly.png"
    },
    "manifest_version": 3,
    "name": "FillJoy Simple Form Filler",
-   "permissions": [ "activeTab", "scripting" ],
-   "version": "3.5.0"
+   "permissions": [ "activeTab", "scripting", "storage" ],
+   "host_permissions": [ "<all_urls>" ],
+   "content_scripts": [
+      {
+         "matches": [ "<all_urls>" ],
+         "js": [ "js/fillFormsImproved.js" ],
+         "run_at": "document_idle"
+      }
+   ],
+   "version": "3.7.0"
 }
