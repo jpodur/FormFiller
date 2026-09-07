@@ -2,6 +2,9 @@
    "action": {
       "default_popup": "popup.html"
    },
+   "background": {
+      "service_worker": "js/background.js"
+   },
    "description": "FillJoy Simple Form Filler - Automatically fill forms with CSV data",
    "icons": {
       "128": "assets/images/iconOnly.png"
@@ -17,5 +20,5 @@
          "run_at": "document_idle"
       }
    ],
-   "version": "3.7.0"
+   "version": "3.7.1"
 }
